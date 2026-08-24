@@ -1,17 +1,9 @@
-var builder = WebApplication.CreateBuilder(args);
+using AzurePrivateEndpointDemo.API.Extensions;
 
-// Add services to the container.
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+builder.AddApplicationServices();
 
-builder.Services.AddControllers();
-
-var app = builder.Build();
-
-// Configure the HTTP request pipeline.
-
-app.UseHttpsRedirection();
-
-app.UseAuthorization();
-
-app.MapControllers();
+WebApplication app = builder.Build();
+app.UseApplicationPipeline();
 
 app.Run();

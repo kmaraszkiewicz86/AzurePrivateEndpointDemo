@@ -1,0 +1,13 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "AzureWebJobsStorage__accountName": "replace-me",
+    "Azure__BlobServiceUri": "https://replace-me.blob.core.windows.net",
+    "Azure__DocumentContainerName": "chatbot-documents",
+    "Azure__SearchEndpoint": "https://replace-me.search.windows.net",
+    "Azure__SearchIndexName": "documents",
+    "Azure__DocumentIntelligenceEndpoint": "https://replace-me.cognitiveservices.azure.com",
+    "Azure__DocumentIntelligenceModelId": "prebuilt-layout"
+  }
+}

@@ -1,121 +1,43 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
 import './App.css'
+import { ChatSection } from './components/ChatSection'
+import { UploadSection } from './components/UploadSection'
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <main>
+      <header className="site-header">
+        <a className="brand" href="#top" aria-label="Private PDF Chat home">
+          <span className="brand-mark" aria-hidden="true">PE</span>
+          <span>Private PDF Chat</span>
+        </a>
+        <div className="private-badge">
+          <span aria-hidden="true">●</span> Private endpoints enabled
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
+      </header>
+
+      <section className="intro" id="top">
+        <p className="eyebrow">Azure learning project</p>
+        <h1>Ask questions of PDFs that never need a public storage URL.</h1>
+        <p className="intro-copy">
+          Upload through the API, wait for event-driven indexing, and ask questions using Azure AI Search and Azure OpenAI.
+        </p>
+        <ol className="flow" aria-label="Document flow">
+          <li><span>01</span><strong>Upload</strong><small>API → Blob Storage</small></li>
+          <li><span>02</span><strong>Index</strong><small>Event Grid → Function</small></li>
+          <li><span>03</span><strong>Ask</strong><small>Search → Azure OpenAI</small></li>
+        </ol>
       </section>
 
-      <div className="ticks"></div>
+      <div className="workspace">
+        <UploadSection />
+        <ChatSection />
+      </div>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      <footer>
+        <span>React → ASP.NET Core → Azure Functions → Azure AI Search → Azure OpenAI</span>
+        <span>No storage keys. No client secrets. No direct blob URLs.</span>
+      </footer>
+    </main>
   )
 }
 
