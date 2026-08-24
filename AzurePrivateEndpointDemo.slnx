@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/API/AzureAISearchIndexer/AzureAISearchIndexer.csproj" />
+  <Project Path="src/API/AzurePrivateEndpointDemo.API/AzurePrivateEndpointDemo.API.csproj" />
+</Solution>
