@@ -146,5 +146,5 @@ public sealed class DocumentService(
     }
 
     private static string CreateDownloadUrl(string blobName) =>
-        $"/api/documents/{Uri.EscapeDataString(blobName)}";
+        $"/api/Documents/{Uri.EscapeDataString(blobName)}";
 }

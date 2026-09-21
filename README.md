@@ -1,191 +1,103 @@
 # Azure Private Endpoint Demo
 
-Learning project built with React, ASP.NET Core controllers, and one .NET 10 isolated Azure Function.
+This demo app supports an article about setting up basic Azure Private Endpoints for a Web App, Blob Storage, Document Intelligence, and Azure AI Search to complete an end-to-end private endpoint scenario.
 
-This project was built to have start point for learning private endpoint in Azure Envinronment.
+## UI — `src/UI/src`
 
-## Current architecture
+- `App` displays the page layout, upload section, and indexed-file section.
+- `UploadSection` lets users upload PDFs and download or delete files uploaded during the current session.
+  - `handleUpload` uploads the selected PDF and displays its status.
+  - `handleDelete` deletes a PDF and removes it from the session list.
+- `IndexedDocumentsSection` loads indexed files, refreshes the list on demand, and displays expandable page content with download links.
+- `documentService` handles document requests through Axios.
+  - `uploadPdf` sends a PDF to `POST /api/Documents` and resolves its download URL.
+  - `deletePdf` sends a request to `DELETE /api/Documents/{blobName}`.
+- `indexedDocumentService` retrieves the indexed-file list.
+  - `getIndexedDocuments` calls `GET /api/IndexedDocuments` and resolves each file's API download URL.
+- `apiClient` configures Axios using `VITE_API_BASE_URL`, which includes the API host and `/api`.
+  - `getApiErrorMessage` reads the API error message or returns a fallback.
+  - `createApiUrl` converts an API download path into an absolute URL.
+- `UploadedDocument`, `IndexedDocument`, and `IndexedDocumentPage` describe the upload response, indexed files, and page chunks.
 
-Document indexing (Function App):
+## API — `src/API/AzurePrivateEndpointDemo.API`
 
-```text
-PDF upload -> ASP.NET Core API -> private Blob Storage
-Blob event -> Event Grid -> Azure Front Door -> AzureAISearchIndexerFunction
-AzureAISearchIndexerFunction -> Document Intelligence -> Azure AI Search
-```
+### Controllers
 
-UI Chatbot:
+Both controllers use `[ApiController]` and `[Route("api/[controller]")]`.
 
-```text
-React -> ASP.NET Core API -> Azure AI Search -> Azure OpenAI
-```
+- `DocumentsController` exposes PDF operations through `DocumentService`.
+  - `UploadAsync` handles `POST /api/Documents` with multipart field `file` and returns upload details or a validation error.
+  - `DownloadAsync` handles `GET /api/Documents/{blobName}` and returns the PDF stream or HTTP 404.
+  - `DeleteAsync` handles `DELETE /api/Documents/{blobName}` and returns HTTP 204 or 404.
+- `IndexedDocumentsController` exposes content stored in Azure AI Search.
+  - `GetDocumentsAsync` handles `GET /api/IndexedDocuments` and returns files with their extracted page chunks.
 
-The Function project deliberately contains exactly one Function entry point: `AzureAISearchIndexerFunction`. It has only an `EventGridTrigger`. There is no HTTP-triggered Function in this repository.
+### Services
 
-## Projects
+- `DocumentService` manages PDFs in Blob Storage.
+  - `UploadAsync` validates the PDF, uploads it under its file name, and returns an API download URL.
+  - `DownloadAsync` reads the blob's metadata and content, returning null when the file is missing.
+  - `DeleteAsync` deletes the blob and reports whether it existed.
+  - `ValidateFile` checks the file size and PDF extension.
+  - `ValidatePdfSignatureAsync` checks that the content starts with the PDF signature.
+  - `ReadOriginalFileName` decodes the original name from blob metadata or falls back to the blob name.
+  - `CreateDownloadUrl` builds an API download path with the escaped blob name.
+- `IndexedDocumentService` reads indexed content without calling Azure OpenAI.
+  - `GetDocumentsAsync` retrieves search results in batches and groups them by blob and page, preserving individual text chunks.
 
-```text
-src/UI/                                      React + TypeScript UI
-src/API/AzurePrivateEndpointDemo.API/        PDF endpoints and chatbot/RAG logic
-src/API/AzureAISearchIndexer/                the Event Grid indexing Function
-```
+### Registration and configuration
 
-## AzureAISearchIndexerFunction
+- `ApplicationServiceExtensions.AddApplicationServices` registers controllers, problem details, Azure services, and CORS.
+- `AzureStorageExtensions.AddAzureStorage` registers `DefaultAzureCredential`, the blob container client, and `DocumentService`.
+- `IndexedDocumentExtensions.AddIndexedDocumentServices` registers the search client and `IndexedDocumentService`.
+- `CorsExtensions.AddApplicationCors` allows the configured UI origins.
+- `WebApplicationExtensions.UseApplicationPipeline` configures exception handling, HTTPS outside development, CORS, and controller routes.
+- `AzureStorageOptions` contains the blob endpoint, container name, and upload size limit.
+- `AzureAiOptions` contains the Azure AI Search endpoint and index name.
 
-`AzureAISearchIndexerFunction.cs` receives both supported storage event types and delegates them to two private methods:
+### Data classes
 
-- `HandleBlobCreatedAsync`
-- `HandleBlobDeletedAsync`
+- `DocumentUploadResponse` contains the uploaded file's name, blob name, and API download URL.
+- `DownloadedDocument` contains the PDF stream, content type, and file name.
+- `IndexedDocumentDto` contains an indexed file's identity, name, download URL, and pages.
+- `IndexedDocumentPageDto` contains a page number and its separate text chunks because the index does not store chunk positions.
+- `SearchDocumentChunk` maps indexed fields to the API's search results.
+- `ErrorResponseDto` contains a validation error message.
 
-The Function itself coordinates the flow. Azure-specific operations are kept in three focused services:
+## Function — `src/API/AzureAISearchIndexer`
 
-| Service | Responsibility |
-|---|---|
-| `AzureBlobService` | Validate the configured container and download a PDF with `DefaultAzureCredential`. |
-| `DocumentIntelligenceService` | Extract page-aware PDF text and split long pages into chunks. |
-| `AzureSearchService` | Create or update the index, upload chunks, find a document, and delete its chunks. |
+### Event handler
 
-`ProcessedEventMemory` contains only the in-memory set of processed Event Grid IDs.
+`AzureAISearchIndexerFunction` is the single Function entry point and uses only an `EventGridTrigger`.
 
-### Index check
+- `RunAsync` checks the index and event's container, then dispatches supported events to the create or delete handler.
+- `HandleBlobCreatedAsync` skips completed events, downloads the PDF, extracts and indexes its text, and marks the event as processed after success.
+- `HandleBlobDeletedAsync` skips completed events, deletes matching search entries, and marks the event as processed after success.
+- `StorageBlobEventData` holds the blob URL received in the event.
 
-For every supported event, `AzureSearchService.EnsureIndexExistsAsync` checks the configured Azure AI Search index. A missing index is created. An index missing any required fields is updated before the event is handled.
+### Services
 
-The index contains:
+- `AzureBlobService` reads PDFs from the configured container.
+  - `TryGetBlobName` checks the event URL's container and extracts the blob name.
+  - `DownloadPdfAsync` downloads the PDF bytes and reads the original file name.
+  - `ReadOriginalFileName` decodes the original name from metadata or falls back to the path's file name.
+- `DocumentIntelligenceService` extracts page-aware PDF text.
+  - `ExtractPageChunksAsync` analyzes the PDF and splits each page's text into chunks.
+  - `SplitText` divides text into overlapping chunks using the configured size limits.
+- `AzureSearchService` manages the index and its documents.
+  - `EnsureIndexExistsAsync` creates the index or updates its definition when required fields are missing.
+  - `IndexDocumentAsync` removes existing chunks for the file and uploads its current chunks.
+  - `DeleteDocumentAsync` delegates deletion using the blob name as the file name.
+  - `DeleteByFileNameAsync` finds matching chunk keys and deletes them in batches.
+  - `CreateIndexDefinition` defines the chunk ID, document ID, file name, page number, content, and blob name fields.
+- `ProcessedEventMemory` stores completed event IDs only within the current process, so they are lost on restart and are not shared across instances.
+  - `WasProcessed` checks whether an event ID is already recorded.
+  - `MarkAsProcessed` records a successfully completed event ID.
 
-| Field | Purpose |
-|---|---|
-| `id` | Unique chunk key and Azure AI Search key field. |
-| `documentId` | The unique Blob Storage blob name used as the document identifier. |
-| `fileName` | Original uploaded PDF name. |
-| `pageNumber` | Page number returned by Document Intelligence. |
-| `content` | Searchable page or page-chunk text. |
-| `blobName` | Private blob path/identifier, never a public Blob Storage URL. |
+### Registration and data classes
 
-### BlobCreated flow
-
-1. Verify that the event URL belongs to the configured container.
-2. Check the unique Event Grid ID in `ProcessedEventMemory`.
-3. Ignore the event when the ID was already processed.
-4. Download the PDF from private Blob Storage with Managed Identity through `DefaultAzureCredential`.
-5. Send the PDF content to Azure AI Document Intelligence.
-6. Preserve page numbers and split long page text into chunks.
-7. Remove old search chunks for the same document identifier.
-8. Upload the current chunks to Azure AI Search.
-9. Add the Event Grid ID to memory only after indexing completes successfully.
-
-### BlobDeleted flow
-
-1. Check the unique Event Grid ID in `ProcessedEventMemory`.
-2. Ignore the event when the ID was already processed.
-3. Use the unique Blob Storage blob name to find matching chunks.
-4. Check Azure AI Search for chunks whose `fileName` has that value.
-5. Delete all matching chunks when they exist.
-6. Add the Event Grid ID to memory only after the delete operation completes successfully.
-
-### In-memory idempotency
-
-Processed event IDs are held in a singleton `ConcurrentDictionary` through `ProcessedEventMemory`, as required for this learning version. A successful create/delete operation is marked only at its end, so a failed Event Grid delivery can be retried.
-
-This is process-local memory: IDs are lost after a Function App restart, and separate scaled-out instances do not share them. A production version that must remain idempotent across restarts and instances needs a persistent Azure-backed store, but that mechanism is intentionally not included here.
-
-## ASP.NET Core API
-
-Controllers contain only HTTP concerns. Storage and chatbot communication are implemented in injected services.
-
-| Controller | Service | Responsibility |
-|---|---|---|
-| `DocumentsController` | `DocumentService` | Validate, upload, download, and delete PDFs. |
-| `ChatbotController` | `ChatbotService` | Retrieve PDF chunks from Azure AI Search, call Azure OpenAI, and return the answer with source URLs. |
-
-All request and response DTOs are separate immutable `sealed class` types with get-only properties. No DTO uses a `record`.
-
-### API endpoints
-
-| Method | Route | Purpose |
-|---|---|---|
-| `POST` | `/api/documents` | Upload one PDF using multipart field `file`. |
-| `GET` | `/api/documents/{blobName}` | Stream one private PDF through the API. |
-| `DELETE` | `/api/documents/{blobName}` | Delete one private PDF. |
-| `POST` | `/api/chatbot` | Answer a question using Azure AI Search and Azure OpenAI. |
-
-There is no file-listing endpoint. The UI never receives a direct Azure Blob Storage URL.
-
-`ChatbotService` searches the configured Azure AI Search index for relevant chunks, builds a page-aware context, and calls the configured Azure OpenAI chat deployment through `Azure.AI.OpenAI`. It returns `fileName`, `pageNumber`, `documentId`, and an API download URL for each distinct source page. The Function project remains restricted to the single Event Grid Function and contains no HTTP trigger.
-
-## Dependency registration
-
-Both .NET projects use .NET 10 `IHostApplicationBuilder` extension methods instead of keeping all configuration in `Program.cs`.
-
-API registration is split across:
-
-- `ApplicationServiceExtensions`
-- `AzureStorageExtensions`
-- `ChatbotExtensions`
-- `CorsExtensions`
-- `WebApplicationExtensions`
-
-Function registration is in `FunctionServiceExtensions`. The two `Program.cs` files only create the builder, call the appropriate extensions, build, and run.
-
-## Authentication and Managed Identity roles
-
-Azure SDK clients receive an injected `DefaultAzureCredential`. The code does not use storage account keys, Azure service connection strings, client secrets, search keys, or Document Intelligence keys.
-
-Function App managed identity:
-
-| Azure service | Required role/data access |
-|---|---|
-| Blob Storage | `Storage Blob Data Reader` on the PDF storage scope. |
-| Azure AI Search | `Search Service Contributor` to create/update the index and `Search Index Data Contributor` to query/upload/delete documents. |
-| Document Intelligence | `Cognitive Services User`. |
-
-ASP.NET Core API managed identity:
-
-| Azure service | Required role/data access |
-|---|---|
-| Blob Storage | `Storage Blob Data Contributor` for upload, download, and delete operations. |
-| Azure AI Search | `Search Index Data Reader` for chatbot context retrieval. |
-| Azure OpenAI | `Cognitive Services OpenAI User` for chat completions. |
-
-The Azure Functions host storage configuration is separate from the application clients. It can use identity-based settings such as `AzureWebJobsStorage__accountName` according to the selected Azure Functions hosting plan.
-
-## Configuration
-
-Function App section: `Azure`.
-
-| Setting | Example/default |
-|---|---|
-| `BlobServiceUri` | `https://<account>.blob.core.windows.net` |
-| `DocumentContainerName` | `chatbot-documents` |
-| `SearchEndpoint` | `https://<service>.search.windows.net` |
-| `SearchIndexName` | `documents` |
-| `DocumentIntelligenceEndpoint` | `https://<resource>.cognitiveservices.azure.com` |
-| `DocumentIntelligenceModelId` | `prebuilt-layout` |
-| `MaxChunkCharacters` | `4000` |
-| `ChunkOverlapCharacters` | `300` |
-
-Azure Function App settings use double underscores, for example `Azure__DocumentContainerName`. For local development, copy `local.settings.example.json` to `local.settings.json` and replace endpoint placeholders.
-
-API sections:
-
-| Setting | Purpose |
-|---|---|
-| `AzureStorage:BlobServiceUri` | Private Blob service URI. |
-| `AzureStorage:DocumentContainerName` | PDF container name. |
-| `AzureStorage:MaxUploadBytes` | Maximum accepted PDF size. |
-| `AzureAI:SearchEndpoint` | Azure AI Search endpoint. |
-| `AzureAI:SearchIndexName` | Index created by the Function App. |
-| `AzureAI:OpenAIEndpoint` | Azure OpenAI endpoint. |
-| `AzureAI:OpenAIChatDeployment` | Azure OpenAI chat deployment name. |
-| `AzureAI:SearchResultCount` | Number of PDF chunks added to the prompt context. |
-| `Cors:AllowedOrigins` | Allowed React development origins. |
-
-React UI configuration:
-
-| Setting | Purpose |
-|---|---|
-| `VITE_API_BASE_URL` | Absolute URL of the separately hosted API, including `/api`, for example `http://localhost:5107/api`. |
-
-Copy `src/UI/.env.example` to `src/UI/.env.local` for local development. The UI calls the API directly with Axios; Vite does not proxy `/api` requests.
-
-During local development, `DefaultAzureCredential` can use the developer identity created by `az login` or the IDE.
+- `FunctionServiceExtensions.AddIndexingServices` registers configuration validation, `DefaultAzureCredential`, indexing services, and the processed-event memory.
+- `AzureServicesOptions` contains Azure endpoints, container and index names, the Document Intelligence model, and chunk settings.
+- `BlobDocument` contains the downloaded PDF bytes and file name.
+- `DocumentPageChunk` contains extracted text with its page and chunk numbers.
+- `SearchDocumentChunk` represents the fields uploaded to Azure AI Search.

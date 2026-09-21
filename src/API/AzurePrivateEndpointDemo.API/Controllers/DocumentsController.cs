@@ -8,7 +8,7 @@ namespace AzurePrivateEndpointDemo.API.Controllers;
 /// Exposes PDF upload, download, and delete operations.
 /// </summary>
 [ApiController]
-[Route("api/documents")]
+[Route("api/[controller]")]
 public sealed class DocumentsController(DocumentService documentService) : ControllerBase
 {
     /// <summary>

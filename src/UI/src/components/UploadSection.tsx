@@ -22,7 +22,7 @@ export function UploadSection() {
       setSelectedFile(null)
       if (fileInput.current) fileInput.current.value = ''
       setStatus(
-        'Upload complete. Event Grid now starts indexing asynchronously; wait a moment before asking about it.',
+        'Upload complete. Event Grid starts indexing asynchronously; wait a moment, then refresh the indexed files.',
       )
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Could not upload the PDF.')

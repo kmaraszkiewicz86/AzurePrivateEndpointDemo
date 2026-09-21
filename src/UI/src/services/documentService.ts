@@ -7,7 +7,7 @@ export async function uploadPdf(file: File): Promise<UploadedDocument> {
   formData.append('file', file)
 
   try {
-    const response = await apiClient.post<UploadedDocument>('/documents', formData)
+    const response = await apiClient.post<UploadedDocument>('/Documents', formData)
     return {
       ...response.data,
       downloadUrl: createApiUrl(response.data.downloadUrl),
@@ -20,7 +20,7 @@ export async function uploadPdf(file: File): Promise<UploadedDocument> {
 /** Deletes one PDF through the API; Event Grid handles search-index cleanup asynchronously. */
 export async function deletePdf(blobName: string): Promise<void> {
   try {
-    await apiClient.delete(`/documents/${encodeURIComponent(blobName)}`)
+    await apiClient.delete(`/Documents/${encodeURIComponent(blobName)}`)
   } catch (error) {
     throw new Error(getApiErrorMessage(error, 'Could not delete the PDF.'))
   }

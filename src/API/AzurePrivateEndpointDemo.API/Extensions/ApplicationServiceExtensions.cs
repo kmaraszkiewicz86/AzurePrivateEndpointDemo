@@ -18,7 +18,7 @@ public static class ApplicationServiceExtensions
         builder.Services.AddProblemDetails();
 
         builder.AddAzureStorage();
-        builder.AddChatbotServices();
+        builder.AddIndexedDocumentServices();
         builder.AddApplicationCors();
 
         return builder;
