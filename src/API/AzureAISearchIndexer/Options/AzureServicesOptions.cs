@@ -9,6 +9,9 @@ public sealed class AzureServicesOptions
 {
     public const string SectionName = "Azure";
 
+    [Required]
+    public string ManagedIdentityClientId { get; init; } = string.Empty;
+
     [Required, Url]
     public string BlobServiceUri { get; init; } = string.Empty;
 

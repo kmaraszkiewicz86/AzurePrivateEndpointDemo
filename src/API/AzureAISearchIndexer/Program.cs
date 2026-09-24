@@ -1,4 +1,4 @@
-using AzureAISearchIndexer.Extensions;
+using AzureAISearchIndexer.Services;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Extensions.DependencyInjection;

@@ -2,12 +2,15 @@
   "IsEncrypted": false,
   "Values": {
     "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
-    "AzureWebJobsStorage__accountName": "replace-me",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "Azure__ManagedIdentityClientId": "00bf69e6-71c3-492e-a8b0-fdb421e97e1e",
     "Azure__BlobServiceUri": "https://replace-me.blob.core.windows.net",
     "Azure__DocumentContainerName": "chatbot-documents",
-    "Azure__SearchEndpoint": "https://replace-me.search.windows.net",
+    "Azure__SearchEndpoint": "https://azureaisearchservicekmar.search.windows.net",
     "Azure__SearchIndexName": "documents",
-    "Azure__DocumentIntelligenceEndpoint": "https://replace-me.cognitiveservices.azure.com",
-    "Azure__DocumentIntelligenceModelId": "prebuilt-layout"
+    "Azure__DocumentIntelligenceEndpoint": "https://azureaisearchdocumentintelligence.cognitiveservices.azure.com/",
+    "Azure__DocumentIntelligenceModelId": "prebuilt-read",
+    "Azure__MaxChunkCharacters": "4000",
+    "Azure__ChunkOverlapCharacters": "300"
   }
 }

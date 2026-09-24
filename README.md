@@ -1,6 +1,7 @@
 # Azure Private Endpoint Demo
 
 This demo app supports an article about setting up basic Azure Private Endpoints for a Web App, Blob Storage, Document Intelligence, and Azure AI Search to complete an end-to-end private endpoint scenario.
+The article will also show how to create a managed identity for the app and use it to access Azure services.
 
 ## UI — `src/UI/src`
 
@@ -96,8 +97,8 @@ Both controllers use `[ApiController]` and `[Route("api/[controller]")]`.
 
 ### Registration and data classes
 
-- `FunctionServiceExtensions.AddIndexingServices` registers configuration validation, `DefaultAzureCredential`, indexing services, and the processed-event memory.
-- `AzureServicesOptions` contains Azure endpoints, container and index names, the Document Intelligence model, and chunk settings.
+- `FunctionServiceRegistration.AddIndexingServices` validates configuration and registers the credential, indexing services, and processed-event memory.
+- `AzureServicesOptions` contains the managed identity client ID, Azure endpoints, container and index names, the Document Intelligence model, and chunk settings.
 - `BlobDocument` contains the downloaded PDF bytes and file name.
 - `DocumentPageChunk` contains extracted text with its page and chunk numbers.
 - `SearchDocumentChunk` represents the fields uploaded to Azure AI Search.
