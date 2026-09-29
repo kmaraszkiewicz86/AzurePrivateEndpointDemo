@@ -23,6 +23,7 @@ public sealed class AzureSearchService
     private readonly SearchClient _searchClient;
     private readonly string _indexName;
     private readonly ILogger<AzureSearchService> _logger;
+    private volatile bool _indexVerified;
 
     /// <summary>
     /// Creates Azure AI Search management and document clients for the configured index.
@@ -49,6 +50,12 @@ public sealed class AzureSearchService
     /// <param name="cancellationToken">Cancels the Azure AI Search operation.</param>
     public async Task EnsureIndexExistsAsync(CancellationToken cancellationToken)
     {
+        // The index schema does not change at runtime, so one successful check per instance is enough.
+        if (_indexVerified)
+        {
+            return;
+        }
+
         try
         {
             SearchIndex existingIndex = (await _indexClient.GetIndexAsync(_indexName, cancellationToken)).Value;
@@ -58,6 +65,7 @@ public sealed class AzureSearchService
 
             if (RequiredFieldNames.All(existingFields.Contains))
             {
+                _indexVerified = true;
                 return;
             }
         }
@@ -67,13 +75,14 @@ public sealed class AzureSearchService
         }
 
         await _indexClient.CreateOrUpdateIndexAsync(CreateIndexDefinition(), cancellationToken: cancellationToken);
+        _indexVerified = true;
     }
 
     /// <summary>
     /// Replaces all chunks associated with a blob and uploads the current page chunks.
     /// </summary>
     /// <param name="blobName">The unique Blob Storage name used for API downloads.</param>
-    /// <param name="fileName">The unique PDF file name used to find its search chunks.</param>
+    /// <param name="fileName">The original PDF file name shown to users.</param>
     /// <param name="pageChunks">The page-aware text extracted by Document Intelligence.</param>
     /// <param name="cancellationToken">Cancels the Azure AI Search operation.</param>
     public async Task IndexDocumentAsync(
@@ -82,13 +91,13 @@ public sealed class AzureSearchService
         IReadOnlyList<DocumentPageChunk> pageChunks,
         CancellationToken cancellationToken)
     {
-        // A file name is unique in the configured container, so it identifies all chunks to replace.
-        await DeleteByFileNameAsync(fileName, cancellationToken);
+        // A blob name is unique in the container, while original file names can repeat across uploads.
+        await DeleteByBlobNameAsync(blobName, cancellationToken);
 
         SearchDocumentChunk[] searchDocuments = pageChunks
             .Select(chunk => new SearchDocumentChunk(
                 Guid.NewGuid().ToString("N"),
-                fileName,
+                blobName,
                 fileName,
                 chunk.PageNumber,
                 chunk.Content,
@@ -107,35 +116,50 @@ public sealed class AzureSearchService
     /// <summary>
     /// Deletes every indexed chunk associated with the specified blob.
     /// </summary>
-    /// <param name="blobName">The deleted blob name, which is also the indexed file name.</param>
+    /// <param name="blobName">The deleted blob name stored in the <c>blobName</c> field of every chunk.</param>
     /// <param name="cancellationToken">Cancels the Azure AI Search operation.</param>
     /// <returns><see langword="true"/> when matching chunks were found and deleted.</returns>
     public Task<bool> DeleteDocumentAsync(string blobName, CancellationToken cancellationToken) =>
-        DeleteByFileNameAsync(blobName, cancellationToken);
+        DeleteByBlobNameAsync(blobName, cancellationToken);
 
-    private async Task<bool> DeleteByFileNameAsync(string fileName, CancellationToken cancellationToken)
+    private async Task<bool> DeleteByBlobNameAsync(string blobName, CancellationToken cancellationToken)
     {
-        string escapedFileName = fileName.Replace("'", "''", StringComparison.Ordinal);
+        const int PageSize = 1000;
+        string escapedBlobName = blobName.Replace("'", "''", StringComparison.Ordinal);
         var documentKeys = new List<string>();
-        var options = new SearchOptions
-        {
-            Filter = $"fileName eq '{escapedFileName}'",
-            Size = 1000
-        };
-        options.Select.Add("id");
+        int skip = 0;
+        int pageCount;
 
-        SearchResults<SearchDocument> results = await _searchClient.SearchAsync<SearchDocument>(
-            "*",
-            options,
-            cancellationToken);
-
-        await foreach (SearchResult<SearchDocument> result in results.GetResultsAsync())
+        // Collect every key before deleting so removed documents cannot shift the Skip offsets.
+        // OrderBy is not used because the id field is not sortable in the existing index.
+        do
         {
-            if (result.Document.TryGetValue("id", out object? value) && value is string key)
+            var options = new SearchOptions
             {
-                documentKeys.Add(key);
+                Filter = $"blobName eq '{escapedBlobName}'",
+                Size = PageSize,
+                Skip = skip
+            };
+            options.Select.Add("id");
+
+            SearchResults<SearchDocument> results = await _searchClient.SearchAsync<SearchDocument>(
+                "*",
+                options,
+                cancellationToken);
+
+            pageCount = 0;
+            await foreach (SearchResult<SearchDocument> result in results.GetResultsAsync())
+            {
+                pageCount++;
+                if (result.Document.TryGetValue("id", out object? value) && value is string key)
+                {
+                    documentKeys.Add(key);
+                }
             }
+
+            skip += pageCount;
         }
+        while (pageCount == PageSize);
 
         foreach (string[] batch in documentKeys.Chunk(500))
         {

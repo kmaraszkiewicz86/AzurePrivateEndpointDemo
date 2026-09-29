@@ -35,8 +35,8 @@ public sealed class DocumentService(
         await ValidatePdfSignatureAsync(input, cancellationToken);
 
         input.Position = 0;
-        // The file name is also the blob name, so it uniquely identifies the PDF in this container.
-        string blobName = originalFileName;
+        // A generated blob name keeps uploads with the same file name from overwriting each other.
+        string blobName = $"{Guid.NewGuid():N}.pdf";
         BlobClient blobClient = containerClient.GetBlobClient(blobName);
 
         await blobClient.UploadAsync(
@@ -44,6 +44,8 @@ public sealed class DocumentService(
             new BlobUploadOptions
             {
                 HttpHeaders = new BlobHttpHeaders { ContentType = "application/pdf" },
+                // The upload fails instead of overwriting when a blob with this name already exists.
+                Conditions = new BlobRequestConditions { IfNoneMatch = ETag.All },
                 Metadata = new Dictionary<string, string>
                 {
                     [OriginalFileNameMetadataKey] = Convert.ToBase64String(Encoding.UTF8.GetBytes(originalFileName))
@@ -69,13 +71,14 @@ public sealed class DocumentService(
 
         try
         {
-            Response<BlobProperties> properties = await blobClient.GetPropertiesAsync(cancellationToken: cancellationToken);
+            // The download response already carries the content type and metadata, so one call is enough.
             Response<BlobDownloadStreamingResult> download = await blobClient.DownloadStreamingAsync(cancellationToken: cancellationToken);
+            BlobDownloadDetails details = download.Value.Details;
 
             return new DownloadedDocument(
                 download.Value.Content,
-                properties.Value.ContentType ?? "application/pdf",
-                ReadOriginalFileName(properties.Value.Metadata, blobName));
+                details.ContentType ?? "application/pdf",
+                ReadOriginalFileName(details.Metadata, blobName));
         }
         catch (RequestFailedException exception) when (exception.Status == StatusCodes.Status404NotFound)
         {

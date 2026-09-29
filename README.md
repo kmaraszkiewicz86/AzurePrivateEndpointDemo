@@ -36,8 +36,8 @@ Both controllers use `[ApiController]` and `[Route("api/[controller]")]`.
 ### Services
 
 - `DocumentService` manages PDFs in Blob Storage.
-  - `UploadAsync` validates the PDF, uploads it under its file name, and returns an API download URL.
-  - `DownloadAsync` reads the blob's metadata and content, returning null when the file is missing.
+  - `UploadAsync` validates the PDF, uploads it under a generated `<GUID>.pdf` blob name without overwriting existing blobs, keeps the original file name in blob metadata, and returns an API download URL.
+  - `DownloadAsync` reads the blob's content, content type, and metadata in one download call, returning null when the file is missing.
   - `DeleteAsync` deletes the blob and reports whether it existed.
   - `ValidateFile` checks the file size and PDF extension.
   - `ValidatePdfSignatureAsync` checks that the content starts with the PDF signature.
@@ -49,12 +49,13 @@ Both controllers use `[ApiController]` and `[Route("api/[controller]")]`.
 ### Registration and configuration
 
 - `ApplicationServiceExtensions.AddApplicationServices` registers controllers, problem details, Azure services, and CORS.
-- `AzureStorageExtensions.AddAzureStorage` registers `DefaultAzureCredential`, the blob container client, and `DocumentService`.
+- `AzureStorageExtensions.AddAzureStorage` registers `DefaultAzureCredential` (with an optional user-assigned Managed Identity), the blob container client, and `DocumentService`.
 - `IndexedDocumentExtensions.AddIndexedDocumentServices` registers the search client and `IndexedDocumentService`.
 - `CorsExtensions.AddApplicationCors` allows the configured UI origins.
 - `WebApplicationExtensions.UseApplicationPipeline` configures exception handling, HTTPS outside development, CORS, and controller routes.
 - `AzureStorageOptions` contains the blob endpoint, container name, and upload size limit.
 - `AzureAiOptions` contains the Azure AI Search endpoint and index name.
+- `AzureIdentityOptions` contains the optional `AzureIdentity:ManagedIdentityClientId`; when set to a valid GUID, the API uses that user-assigned Managed Identity, and when empty it uses the default credential chain.
 
 ### Data classes
 
@@ -71,7 +72,7 @@ Both controllers use `[ApiController]` and `[Route("api/[controller]")]`.
 
 `AzureAISearchIndexerFunction` is the single Function entry point and uses only an `EventGridTrigger`.
 
-- `RunAsync` checks the index and event's container, then dispatches supported events to the create or delete handler.
+- `RunAsync` ignores unsupported event types, blobs from other containers, and created blobs that are not PDFs, then checks the index and dispatches supported events to the create or delete handler.
 - `HandleBlobCreatedAsync` skips completed events, downloads the PDF, extracts and indexes its text, and marks the event as processed after success.
 - `HandleBlobDeletedAsync` skips completed events, deletes matching search entries, and marks the event as processed after success.
 - `StorageBlobEventData` holds the blob URL received in the event.
@@ -86,10 +87,10 @@ Both controllers use `[ApiController]` and `[Route("api/[controller]")]`.
   - `ExtractPageChunksAsync` analyzes the PDF and splits each page's text into chunks.
   - `SplitText` divides text into overlapping chunks using the configured size limits.
 - `AzureSearchService` manages the index and its documents.
-  - `EnsureIndexExistsAsync` creates the index or updates its definition when required fields are missing.
-  - `IndexDocumentAsync` removes existing chunks for the file and uploads its current chunks.
-  - `DeleteDocumentAsync` delegates deletion using the blob name as the file name.
-  - `DeleteByFileNameAsync` finds matching chunk keys and deletes them in batches.
+  - `EnsureIndexExistsAsync` creates the index or updates its definition when required fields are missing, checking it only once per Function instance.
+  - `IndexDocumentAsync` removes existing chunks for the blob name and uploads its current chunks, storing the blob name as `documentId` and the original name as `fileName`.
+  - `DeleteDocumentAsync` deletes all chunks for the blob name.
+  - `DeleteByBlobNameAsync` pages through all matching chunk keys, then deletes them in batches.
   - `CreateIndexDefinition` defines the chunk ID, document ID, file name, page number, content, and blob name fields.
 - `ProcessedEventMemory` stores completed event IDs only within the current process, so they are lost on restart and are not shared across instances.
   - `WasProcessed` checks whether an event ID is already recorded.

@@ -3,7 +3,6 @@ using Azure.Identity;
 using Azure.Storage.Blobs;
 using AzurePrivateEndpointDemo.API.Options;
 using AzurePrivateEndpointDemo.API.Services;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace AzurePrivateEndpointDemo.API.Extensions;
@@ -26,8 +25,28 @@ public static class AzureStorageExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
+        builder.Services
+            .AddOptions<AzureIdentityOptions>()
+            .BindConfiguration(AzureIdentityOptions.SectionName)
+            .Validate(
+                options => string.IsNullOrWhiteSpace(options.ManagedIdentityClientId)
+                    || Guid.TryParse(options.ManagedIdentityClientId, out _),
+                $"{AzureIdentityOptions.SectionName}:{nameof(AzureIdentityOptions.ManagedIdentityClientId)} must be a valid GUID when set.")
+            .ValidateOnStart();
+
         // DefaultAzureCredential uses the developer identity locally and Managed Identity in Azure.
-        builder.Services.AddSingleton<TokenCredential>(_ => new DefaultAzureCredential());
+        // A configured client ID selects a user-assigned identity; an empty value keeps the system-assigned one.
+        builder.Services.AddSingleton<TokenCredential>(serviceProvider =>
+        {
+            string? clientId = serviceProvider
+                .GetRequiredService<IOptions<AzureIdentityOptions>>()
+                .Value
+                .ManagedIdentityClientId;
+
+            return string.IsNullOrWhiteSpace(clientId)
+                ? new DefaultAzureCredential()
+                : new DefaultAzureCredential(new DefaultAzureCredentialOptions { ManagedIdentityClientId = clientId });
+        });
         builder.Services.AddSingleton(serviceProvider =>
         {
             AzureStorageOptions options = serviceProvider

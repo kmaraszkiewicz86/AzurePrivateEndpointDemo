@@ -30,8 +30,6 @@ public sealed class AzureAISearchIndexerFunction(
         [EventGridTrigger] CloudEvent cloudEvent,
         CancellationToken cancellationToken)
     {
-        await searchService.EnsureIndexExistsAsync(cancellationToken);
-
         if (cloudEvent.Type is not BlobCreatedEventType and not BlobDeletedEventType)
         {
             logger.LogInformation("Ignoring unsupported Event Grid event type {EventType}.", cloudEvent.Type);
@@ -44,6 +42,16 @@ public sealed class AzureAISearchIndexerFunction(
             logger.LogWarning("Ignoring Event Grid event {EventId} because its blob URL is invalid or belongs to another container.", cloudEvent.Id);
             return;
         }
+
+        if (cloudEvent.Type == BlobCreatedEventType
+            && !string.Equals(Path.GetExtension(blobName), ".pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogInformation("Ignoring BlobCreated event {EventId} because blob {BlobName} is not a PDF.", cloudEvent.Id, blobName);
+            return;
+        }
+
+        // Ignored events return above, so they never call Azure AI Search.
+        await searchService.EnsureIndexExistsAsync(cancellationToken);
 
         if (cloudEvent.Type == BlobCreatedEventType)
         {
