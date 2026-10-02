@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Azure.Messaging;
 using AzureAISearchIndexer.Models;
@@ -21,25 +22,32 @@ public sealed class AzureAISearchIndexerFunction(
     private const string BlobDeletedEventType = "Microsoft.Storage.BlobDeleted";
 
     /// <summary>
-    /// Receives one Event Grid event and delegates it to the create or delete method.
+    /// Receives one Blob Storage event from Azure Queue Storage and delegates it to the create or delete method.
     /// </summary>
-    /// <param name="cloudEvent">The Blob Storage event delivered by Event Grid.</param>
+    /// <param name="message">The CloudEvents JSON written to the queue by the Event Grid subscription.</param>
     /// <param name="cancellationToken">Cancels the indexing operation.</param>
     [Function(nameof(AzureAISearchIndexerFunction))]
     public async Task RunAsync(
-        [EventGridTrigger] CloudEvent cloudEvent,
+        [QueueTrigger("%DocumentEventsQueueName%", Connection = "DocumentEventsQueue")] string message,
         CancellationToken cancellationToken)
     {
+        CloudEvent? cloudEvent = ParseCloudEvent(message);
+        if (cloudEvent is null)
+        {
+            logger.LogWarning("Ignoring queue message because it is not a valid CloudEvents event.");
+            return;
+        }
+
         if (cloudEvent.Type is not BlobCreatedEventType and not BlobDeletedEventType)
         {
-            logger.LogInformation("Ignoring unsupported Event Grid event type {EventType}.", cloudEvent.Type);
+            logger.LogInformation("Ignoring unsupported event type {EventType}.", cloudEvent.Type);
             return;
         }
 
         StorageBlobEventData? eventData = cloudEvent.Data?.ToObjectFromJson<StorageBlobEventData>();
         if (eventData is null || !blobService.TryGetBlobName(eventData.Url, out string blobName))
         {
-            logger.LogWarning("Ignoring Event Grid event {EventId} because its blob URL is invalid or belongs to another container.", cloudEvent.Id);
+            logger.LogWarning("Ignoring event {EventId} because its blob URL is invalid or belongs to another container.", cloudEvent.Id);
             return;
         }
 
@@ -84,7 +92,7 @@ public sealed class AzureAISearchIndexerFunction(
             pageChunks,
             cancellationToken);
 
-        // Mark the event only after every Azure operation succeeds so Event Grid can retry failures.
+        // Mark the event only after every Azure operation succeeds so the queue can retry failures.
         processedEventMemory.MarkAsProcessed(eventId);
         logger.LogInformation("BlobCreated event {EventId} was processed successfully.", eventId);
     }
@@ -109,6 +117,19 @@ public sealed class AzureAISearchIndexerFunction(
                 ? "BlobDeleted event {EventId} removed the document from Azure AI Search."
                 : "BlobDeleted event {EventId} found no matching document in Azure AI Search.",
             eventId);
+    }
+
+    private static CloudEvent? ParseCloudEvent(string message)
+    {
+        try
+        {
+            return CloudEvent.Parse(BinaryData.FromString(message));
+        }
+        catch (Exception exception) when (exception is JsonException or ArgumentException)
+        {
+            // A malformed message can never succeed, so it is dropped instead of retried into the poison queue.
+            return null;
+        }
     }
 
     private sealed class StorageBlobEventData

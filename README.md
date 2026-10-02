@@ -70,9 +70,9 @@ Both controllers use `[ApiController]` and `[Route("api/[controller]")]`.
 
 ### Event handler
 
-`AzureAISearchIndexerFunction` is the single Function entry point and uses only an `EventGridTrigger`.
+`AzureAISearchIndexerFunction` is the single Function entry point and uses only a `QueueTrigger`. An Event Grid subscription on the Blob Storage account delivers `BlobCreated` and `BlobDeleted` events in the CloudEvents v1.0 schema to the Azure Storage queue named by `DocumentEventsQueueName`, using the `DocumentEventsQueue` connection.
 
-- `RunAsync` ignores unsupported event types, blobs from other containers, and created blobs that are not PDFs, then checks the index and dispatches supported events to the create or delete handler.
+- `RunAsync` parses the queue message as a CloudEvent and drops malformed messages, then ignores unsupported event types, blobs from other containers, and created blobs that are not PDFs, then checks the index and dispatches supported events to the create or delete handler.
 - `HandleBlobCreatedAsync` skips completed events, downloads the PDF, extracts and indexes its text, and marks the event as processed after success.
 - `HandleBlobDeletedAsync` skips completed events, deletes matching search entries, and marks the event as processed after success.
 - `StorageBlobEventData` holds the blob URL received in the event.
