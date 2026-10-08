@@ -78,6 +78,9 @@ public sealed class AzureSearchService
         _indexVerified = true;
     }
 
+    public async Task CheckConfigurationAsync(CancellationToken cancellationToken) =>
+        await _indexClient.GetServiceStatisticsAsync(cancellationToken);
+
     /// <summary>
     /// Replaces all chunks associated with a blob and uploads the current page chunks.
     /// </summary>

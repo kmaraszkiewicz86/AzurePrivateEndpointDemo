@@ -13,6 +13,7 @@ namespace AzureAISearchIndexer.Services;
 public sealed class DocumentIntelligenceService
 {
     private readonly DocumentIntelligenceClient _client;
+    private readonly DocumentIntelligenceAdministrationClient _administrationClient;
     private readonly AzureServicesOptions _options;
 
     /// <summary>
@@ -28,7 +29,13 @@ public sealed class DocumentIntelligenceService
         _client = new DocumentIntelligenceClient(
             new Uri(_options.DocumentIntelligenceEndpoint),
             credential);
+        _administrationClient = new DocumentIntelligenceAdministrationClient(
+            new Uri(_options.DocumentIntelligenceEndpoint),
+            credential);
     }
+
+    public async Task CheckConfigurationAsync(CancellationToken cancellationToken) =>
+        await _administrationClient.GetResourceDetailsAsync(cancellationToken);
 
     /// <summary>
     /// Analyzes a PDF and splits extracted page text into configured chunk sizes.

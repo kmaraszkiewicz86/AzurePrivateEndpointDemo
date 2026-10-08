@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Azure.Messaging;
+using Azure;
 using AzureAISearchIndexer.Models;
 using AzureAISearchIndexer.Services;
 using Microsoft.Azure.Functions.Worker;
@@ -20,6 +21,8 @@ public sealed class AzureAISearchIndexerFunction(
 {
     private const string BlobCreatedEventType = "Microsoft.Storage.BlobCreated";
     private const string BlobDeletedEventType = "Microsoft.Storage.BlobDeleted";
+    private readonly SemaphoreSlim availabilityCheckLock = new(1, 1);
+    private bool servicesAvailable;
 
     /// <summary>
     /// Receives one Blob Storage event from Azure Queue Storage and delegates it to the create or delete method.
@@ -31,6 +34,8 @@ public sealed class AzureAISearchIndexerFunction(
         [QueueTrigger("%DocumentEventsQueueName%", Connection = "DocumentEventsQueue")] string message,
         CancellationToken cancellationToken)
     {
+        await CheckServicesAsync(cancellationToken);
+
         CloudEvent? cloudEvent = ParseCloudEvent(message);
         if (cloudEvent is null)
         {
@@ -68,6 +73,53 @@ public sealed class AzureAISearchIndexerFunction(
         }
 
         await HandleBlobDeletedAsync(cloudEvent.Id, blobName, cancellationToken);
+    }
+
+    private async Task CheckServicesAsync(CancellationToken cancellationToken)
+    {
+        if (servicesAvailable)
+        {
+            return;
+        }
+
+        await availabilityCheckLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (servicesAvailable)
+            {
+                return;
+            }
+
+            await CheckServiceAsync("Azure Blob Storage", () => blobService.CheckConfigurationAsync(cancellationToken));
+            await CheckServiceAsync("Azure AI Search", () => searchService.CheckConfigurationAsync(cancellationToken));
+            await CheckServiceAsync("Azure AI Document Intelligence", () => documentIntelligenceService.CheckConfigurationAsync(cancellationToken));
+
+            // Receiving the trigger message confirms that queue access is working.
+            logger.LogInformation("Azure Blob Storage, Azure AI Search, Azure AI Document Intelligence, and the trigger queue are reachable.");
+            servicesAvailable = true;
+        }
+        finally
+        {
+            availabilityCheckLock.Release();
+        }
+    }
+
+    private async Task CheckServiceAsync(string serviceName, Func<Task> check)
+    {
+        try
+        {
+            await check();
+        }
+        catch (RequestFailedException exception)
+        {
+            logger.LogError(exception, "Configuration check failed for {Service}. HTTP status: {Status}. {ErrorCode}", serviceName, exception.Status, exception.ErrorCode);
+            throw;
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "Configuration check failed for {Service}: {Message}", serviceName, exception.Message);
+            throw;
+        }
     }
 
     private async Task HandleBlobCreatedAsync(

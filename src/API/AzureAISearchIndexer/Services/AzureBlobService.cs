@@ -78,6 +78,9 @@ public sealed class AzureBlobService
         return new BlobDocument(response.Value.Content, fileName);
     }
 
+    public async Task CheckConfigurationAsync(CancellationToken cancellationToken) =>
+        await _containerClient.GetPropertiesAsync(cancellationToken: cancellationToken);
+
     private static string ReadOriginalFileName(IDictionary<string, string> metadata, string blobName)
     {
         if (!metadata.TryGetValue(OriginalFileNameMetadataKey, out string? encodedFileName))

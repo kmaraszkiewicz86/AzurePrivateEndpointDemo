@@ -3,6 +3,8 @@
   "Values": {
     "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "DocumentEventsQueue__queueServiceUri": "https://replace-me.queue.core.windows.net",
+    "DocumentEventsQueueName": "document-events",
     "Azure__ManagedIdentityClientId": "00000000-0000-0000-0000-000000000000",
     "Azure__BlobServiceUri": "https://replace-me.blob.core.windows.net",
     "Azure__DocumentContainerName": "chatbot-documents",
