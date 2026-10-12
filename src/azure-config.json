@@ -1,0 +1,87 @@
+[
+  {
+    "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+    "value": "InstrumentationKey=495e6493-5fd2-43eb-967a-8e33a4f836d1;IngestionEndpoint=https://swedencentral-0.in.applicationinsights.azure.com/;LiveEndpoint=https://swedencentral.livediagnostics.monitor.azure.com/;ApplicationId=30be89a9-0488-4341-be51-39e3a7b65c50",
+    "slotSetting": false
+  },
+  {
+    "name": "Azure__BlobServiceUri",
+    "value": "https://azureprivateendpointstr.blob.core.windows.net/",
+    "slotSetting": false
+  },
+  {
+    "name": "Azure__ChunkOverlapCharacters",
+    "value": "300",
+    "slotSetting": false
+  },
+  {
+    "name": "Azure__DocumentContainerName",
+    "value": "chatbot-documents",
+    "slotSetting": false
+  },
+  {
+    "name": "Azure__DocumentIntelligenceEndpoint",
+    "value": "https://azure-private-endpoint-demo-doc-inteligent.cognitiveservices.azure.com/",
+    "slotSetting": false
+  },
+  {
+    "name": "Azure__DocumentIntelligenceModelId",
+    "value": "prebuilt-read",
+    "slotSetting": false
+  },
+  {
+    "name": "Azure__ManagedIdentityClientId",
+    "value": "12880eef-f190-4160-a973-16815f62e0fa",
+    "slotSetting": false
+  },
+  {
+    "name": "Azure__MaxChunkCharacters",
+    "value": "4000",
+    "slotSetting": false
+  },
+  {
+    "name": "Azure__SearchEndpoint",
+    "value": "https://azure-private-endpoint-demo-ai-search.search.windows.net",
+    "slotSetting": false
+  },
+  {
+    "name": "Azure__SearchIndexName",
+    "value": "documents",
+    "slotSetting": false
+  },
+  {
+    "name": "Azure__UseManagedIdentity",
+    "value": "true",
+    "slotSetting": false
+  },
+  {
+    "name": "AzureWebJobsStorage",
+    "value": "DefaultEndpointsProtocol=https;AccountName=azureprivateendpoin941b;AccountKey=joeWbASh7KOIZy0XQe27EGoqWsRJALF7fdVz/lpliKkoVq2cb6PKj9qWRr1K9QH5nTmKU2PY8al2+AStdTE5VA==;EndpointSuffix=core.windows.net",
+    "slotSetting": false
+  },
+  {
+    "name": "DEPLOYMENT_STORAGE_CONNECTION_STRING",
+    "value": "DefaultEndpointsProtocol=https;AccountName=azureprivateendpoin941b;AccountKey=joeWbASh7KOIZy0XQe27EGoqWsRJALF7fdVz/lpliKkoVq2cb6PKj9qWRr1K9QH5nTmKU2PY8al2+AStdTE5VA==;EndpointSuffix=core.windows.net",
+    "slotSetting": false
+  },
+  {
+    "name": "DocumentEventsQueue__clientId",
+    "value": "12880eef-f190-4160-a973-16815f62e0fa",
+    "slotSetting": false
+  },
+  {
+    "name": "DocumentEventsQueue__credential",
+    "value": "managedidentity",
+    "slotSetting": false
+  },
+  {
+    "name": "DocumentEventsQueue__queueServiceUri",
+    "value": "https://azureprivateendpointstr.queue.core.windows.net/",
+    "slotSetting": false
+  },
+  {
+    "name": "DocumentEventsQueueName",
+    "value": "azureprivateendpointstrqueue",
+    "slotSetting": false
+  }
+]
