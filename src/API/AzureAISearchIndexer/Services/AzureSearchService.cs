@@ -1,5 +1,4 @@
 using Azure;
-using Azure.Core;
 using Azure.Search.Documents;
 using Azure.Search.Documents.Indexes;
 using Azure.Search.Documents.Indexes.Models;
@@ -14,7 +13,7 @@ namespace AzureAISearchIndexer.Services;
 /// <summary>
 /// Creates the required Azure AI Search index and manages indexed PDF chunks.
 /// </summary>
-public sealed class AzureSearchService
+public sealed class AzureSearchService : IAzureSearchService
 {
     private static readonly string[] RequiredFieldNames =
         ["id", "documentId", "fileName", "pageNumber", "content", "blobName"];
@@ -26,21 +25,21 @@ public sealed class AzureSearchService
     private volatile bool _indexVerified;
 
     /// <summary>
-    /// Creates Azure AI Search management and document clients for the configured index.
+    /// Uses the Azure AI Search clients created by dependency registration.
     /// </summary>
-    /// <param name="credential">The Managed Identity compatible Azure credential.</param>
+    /// <param name="indexClient">The client used to manage the search index.</param>
+    /// <param name="searchClient">The client used to query and index PDF chunks.</param>
     /// <param name="options">The configured Azure AI Search endpoint and index name.</param>
     /// <param name="logger">The service logger.</param>
     public AzureSearchService(
-        TokenCredential credential,
+        SearchIndexClient indexClient,
+        SearchClient searchClient,
         IOptions<AzureServicesOptions> options,
         ILogger<AzureSearchService> logger)
     {
-        AzureServicesOptions configuration = options.Value;
-        var endpoint = new Uri(configuration.SearchEndpoint);
-        _indexName = configuration.SearchIndexName;
-        _indexClient = new SearchIndexClient(endpoint, credential);
-        _searchClient = _indexClient.GetSearchClient(_indexName);
+        _indexName = options.Value.SearchIndexName;
+        _indexClient = indexClient;
+        _searchClient = searchClient;
         _logger = logger;
     }
 
@@ -78,6 +77,7 @@ public sealed class AzureSearchService
         _indexVerified = true;
     }
 
+    /// <inheritdoc />
     public async Task CheckConfigurationAsync(CancellationToken cancellationToken) =>
         await _indexClient.GetServiceStatisticsAsync(cancellationToken);
 

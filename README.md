@@ -79,6 +79,7 @@ Both controllers use `[ApiController]` and `[Route("api/[controller]")]`.
 
 ### Services
 
+- `IAzureBlobService`, `IDocumentIntelligenceService`, `IAzureSearchService`, and `IProcessedEventMemory` define the contracts injected into `AzureAISearchIndexerFunction`.
 - `AzureBlobService` reads PDFs from the configured container.
   - `TryGetBlobName` checks the event URL's container and extracts the blob name.
   - `DownloadPdfAsync` downloads the PDF bytes and reads the original file name.
@@ -92,14 +93,17 @@ Both controllers use `[ApiController]` and `[Route("api/[controller]")]`.
   - `DeleteDocumentAsync` deletes all chunks for the blob name.
   - `DeleteByBlobNameAsync` pages through all matching chunk keys, then deletes them in batches.
   - `CreateIndexDefinition` defines the chunk ID, document ID, file name, page number, content, and blob name fields.
-- `ProcessedEventMemory` stores completed event IDs only within the current process, so they are lost on restart and are not shared across instances.
+- `ProcessedEventMemory` uses a collection shared across invocation scopes in the current process, so completed event IDs are lost on restart and are not shared across Function App instances.
   - `WasProcessed` checks whether an event ID is already recorded.
   - `MarkAsProcessed` records a successfully completed event ID.
 
 ### Registration and data classes
 
-- `FunctionServiceRegistration.AddIndexingServices` validates configuration and registers the credential, indexing services, and processed-event memory.
-- `AzureServicesOptions` contains the managed identity client ID, Azure endpoints, container and index names, the Document Intelligence model, and chunk settings.
+- `FunctionServiceRegistration.AddIndexingServices` validates configuration, selects authentication using `Azure:UseManagedIdentity`, creates Azure clients, and registers clients and service interfaces with a scoped lifetime for each invocation.
+- `AzureServicesOptions` contains the authentication flag, managed identity client ID, Azure endpoints, container and index names, the Document Intelligence model, and chunk settings.
 - `BlobDocument` contains the downloaded PDF bytes and file name.
 - `DocumentPageChunk` contains extracted text with its page and chunk numbers.
 - `SearchDocumentChunk` represents the fields uploaded to Azure AI Search.
+
+For local client-secret authentication, set `Azure__UseManagedIdentity` to `false` and fill `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, and `AZURE_CLIENT_SECRET` in `local.settings.json` with the details of a Microsoft Entra app registration; leaving these empty allows developer authentication through Visual Studio or Azure CLI.
+In Azure, set `Azure__UseManagedIdentity` to `true` and configure `Azure__ManagedIdentityClientId` for the user-assigned identity; the queue trigger uses its separate `DocumentEventsQueue` connection settings.

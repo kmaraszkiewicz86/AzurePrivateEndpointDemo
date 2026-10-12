@@ -9,7 +9,14 @@ public sealed class AzureServicesOptions
 {
     public const string SectionName = "Azure";
 
-    [Required]
+    /// <summary>
+    /// Selects Managed Identity in Azure or local credentials when disabled.
+    /// </summary>
+    public bool UseManagedIdentity { get; init; } = true;
+
+    /// <summary>
+    /// Identifies the user-assigned managed identity required when Managed Identity is enabled.
+    /// </summary>
     public string ManagedIdentityClientId { get; init; } = string.Empty;
 
     [Required, Url]

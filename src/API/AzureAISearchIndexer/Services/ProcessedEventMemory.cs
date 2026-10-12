@@ -5,9 +5,18 @@ namespace AzureAISearchIndexer.Services;
 /// <summary>
 /// Keeps processed Event Grid event IDs in the current Function App process memory.
 /// </summary>
-public sealed class ProcessedEventMemory
+public sealed class ProcessedEventMemory : IProcessedEventMemory
 {
-    private readonly ConcurrentDictionary<string, byte> _processedEventIds = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, byte> _processedEventIds;
+
+    /// <summary>
+    /// Uses the event ID collection shared by all invocation scopes in this process.
+    /// </summary>
+    /// <param name="processedEventIds">The collection created by dependency registration.</param>
+    public ProcessedEventMemory(ConcurrentDictionary<string, byte> processedEventIds)
+    {
+        _processedEventIds = processedEventIds;
+    }
 
     /// <summary>
     /// Checks whether the current Function process has already completed the Event Grid event.

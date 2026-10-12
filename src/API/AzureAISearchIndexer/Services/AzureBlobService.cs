@@ -1,35 +1,27 @@
 using System.Text;
-using Azure.Core;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using AzureAISearchIndexer.Models;
-using AzureAISearchIndexer.Options;
-using Microsoft.Extensions.Options;
 
 namespace AzureAISearchIndexer.Services;
 
 /// <summary>
 /// Reads PDF files from the configured private Blob Storage container.
 /// </summary>
-public sealed class AzureBlobService
+public sealed class AzureBlobService : IAzureBlobService
 {
     private const string OriginalFileNameMetadataKey = "originalfilename";
     private readonly BlobContainerClient _containerClient;
     private readonly string _containerName;
 
     /// <summary>
-    /// Creates Blob Storage clients for the container selected in configuration.
+    /// Uses the Blob Storage container client created by dependency registration.
     /// </summary>
-    /// <param name="credential">The Managed Identity compatible Azure credential.</param>
-    /// <param name="options">The configured Azure endpoints and container name.</param>
-    public AzureBlobService(
-        TokenCredential credential,
-        IOptions<AzureServicesOptions> options)
+    /// <param name="containerClient">The client for the configured PDF container.</param>
+    public AzureBlobService(BlobContainerClient containerClient)
     {
-        AzureServicesOptions configuration = options.Value;
-        _containerName = configuration.DocumentContainerName;
-        _containerClient = new BlobServiceClient(new Uri(configuration.BlobServiceUri), credential)
-            .GetBlobContainerClient(_containerName);
+        _containerClient = containerClient;
+        _containerName = containerClient.Name;
     }
 
     /// <summary>
@@ -78,6 +70,7 @@ public sealed class AzureBlobService
         return new BlobDocument(response.Value.Content, fileName);
     }
 
+    /// <inheritdoc />
     public async Task CheckConfigurationAsync(CancellationToken cancellationToken) =>
         await _containerClient.GetPropertiesAsync(cancellationToken: cancellationToken);
 

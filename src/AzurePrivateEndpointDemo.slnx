@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/DeploySettings/">
+    <File Path="azure-config.json" />
+  </Folder>
   <Project Path="API/AzureAISearchIndexer/AzureAISearchIndexer.csproj" />
   <Project Path="API/AzurePrivateEndpointDemo.API/AzurePrivateEndpointDemo.API.csproj" />
 </Solution>

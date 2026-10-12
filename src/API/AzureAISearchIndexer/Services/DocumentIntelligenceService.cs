@@ -1,6 +1,5 @@
 using Azure;
 using Azure.AI.DocumentIntelligence;
-using Azure.Core;
 using AzureAISearchIndexer.Models;
 using AzureAISearchIndexer.Options;
 using Microsoft.Extensions.Options;
@@ -10,30 +9,29 @@ namespace AzureAISearchIndexer.Services;
 /// <summary>
 /// Extracts page-aware text from PDF content with Azure AI Document Intelligence.
 /// </summary>
-public sealed class DocumentIntelligenceService
+public sealed class DocumentIntelligenceService : IDocumentIntelligenceService
 {
     private readonly DocumentIntelligenceClient _client;
     private readonly DocumentIntelligenceAdministrationClient _administrationClient;
     private readonly AzureServicesOptions _options;
 
     /// <summary>
-    /// Creates the Document Intelligence client from configured endpoint settings.
+    /// Uses the Document Intelligence clients created by dependency registration.
     /// </summary>
-    /// <param name="credential">The Managed Identity compatible Azure credential.</param>
-    /// <param name="options">The configured Document Intelligence endpoint and model.</param>
+    /// <param name="client">The client used to analyze PDFs.</param>
+    /// <param name="administrationClient">The client used to check resource access.</param>
+    /// <param name="options">The configured analysis model and chunk settings.</param>
     public DocumentIntelligenceService(
-        TokenCredential credential,
+        DocumentIntelligenceClient client,
+        DocumentIntelligenceAdministrationClient administrationClient,
         IOptions<AzureServicesOptions> options)
     {
         _options = options.Value;
-        _client = new DocumentIntelligenceClient(
-            new Uri(_options.DocumentIntelligenceEndpoint),
-            credential);
-        _administrationClient = new DocumentIntelligenceAdministrationClient(
-            new Uri(_options.DocumentIntelligenceEndpoint),
-            credential);
+        _client = client;
+        _administrationClient = administrationClient;
     }
 
+    /// <inheritdoc />
     public async Task CheckConfigurationAsync(CancellationToken cancellationToken) =>
         await _administrationClient.GetResourceDetailsAsync(cancellationToken);
 

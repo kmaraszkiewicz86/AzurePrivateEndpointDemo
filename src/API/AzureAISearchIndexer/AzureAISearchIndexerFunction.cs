@@ -13,10 +13,10 @@ namespace AzureAISearchIndexer;
 /// Handles Blob Storage create and delete events and synchronizes PDF content with Azure AI Search.
 /// </summary>
 public sealed class AzureAISearchIndexerFunction(
-    AzureBlobService blobService,
-    DocumentIntelligenceService documentIntelligenceService,
-    AzureSearchService searchService,
-    ProcessedEventMemory processedEventMemory,
+    IAzureBlobService blobService,
+    IDocumentIntelligenceService documentIntelligenceService,
+    IAzureSearchService searchService,
+    IProcessedEventMemory processedEventMemory,
     ILogger<AzureAISearchIndexerFunction> logger)
 {
     private const string BlobCreatedEventType = "Microsoft.Storage.BlobCreated";

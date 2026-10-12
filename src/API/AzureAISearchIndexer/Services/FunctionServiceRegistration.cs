@@ -1,5 +1,10 @@
+using System.Collections.Concurrent;
+using Azure.AI.DocumentIntelligence;
 using Azure.Core;
 using Azure.Identity;
+using Azure.Search.Documents;
+using Azure.Search.Documents.Indexes;
+using Azure.Storage.Blobs;
 using AzureAISearchIndexer.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -14,6 +19,10 @@ public static class FunctionServiceRegistration
 {
     extension(IHostApplicationBuilder builder)
     {
+        /// <summary>
+        /// Registers indexing services with the authentication mode selected in configuration.
+        /// </summary>
+        /// <returns>The same builder so registrations can be chained.</returns>
         public IHostApplicationBuilder AddIndexingServices()
         {
             builder.Services
@@ -21,29 +30,78 @@ public static class FunctionServiceRegistration
                 .BindConfiguration(AzureServicesOptions.SectionName)
                 .ValidateDataAnnotations()
                 .Validate(
-                    options => Guid.TryParse(options.ManagedIdentityClientId, out _),
-                    "Azure:ManagedIdentityClientId must be a valid client ID (GUID).")
+                    options => !options.UseManagedIdentity || Guid.TryParse(options.ManagedIdentityClientId, out _),
+                    "Azure:ManagedIdentityClientId must be a valid client ID (GUID) when Azure:UseManagedIdentity is true.")
                 .Validate(
                     options => options.ChunkOverlapCharacters < options.MaxChunkCharacters,
                     "Azure:ChunkOverlapCharacters must be smaller than Azure:MaxChunkCharacters.")
                 .ValidateOnStart();
 
-            builder.Services.AddSingleton<TokenCredential>(provider =>
+            builder.Services.AddScoped<TokenCredential>(provider =>
             {
-                string clientId = provider.GetRequiredService<IOptions<AzureServicesOptions>>()
-                    .Value.ManagedIdentityClientId;
+                AzureServicesOptions options = provider.GetRequiredService<IOptions<AzureServicesOptions>>().Value;
 
-                // Uses the selected user-assigned managed identity in Azure and developer credentials locally.
+                if (options.UseManagedIdentity)
+                {
+                    return new ManagedIdentityCredential(
+                        ManagedIdentityId.FromUserAssignedClientId(options.ManagedIdentityClientId));
+                }
+
+                // Local client-secret authentication uses AZURE_TENANT_ID, AZURE_CLIENT_ID,
+                // and AZURE_CLIENT_SECRET; developer credentials are available when these are not configured.
                 return new DefaultAzureCredential(new DefaultAzureCredentialOptions
                 {
-                    ManagedIdentityClientId = clientId
+                    ExcludeManagedIdentityCredential = true
                 });
             });
 
-            builder.Services.AddSingleton<AzureBlobService>();
-            builder.Services.AddSingleton<DocumentIntelligenceService>();
-            builder.Services.AddSingleton<AzureSearchService>();
-            builder.Services.AddSingleton<ProcessedEventMemory>();
+            builder.Services.AddScoped<BlobContainerClient>(provider =>
+            {
+                AzureServicesOptions options = provider.GetRequiredService<IOptions<AzureServicesOptions>>().Value;
+                TokenCredential credential = provider.GetRequiredService<TokenCredential>();
+
+                return new BlobServiceClient(new Uri(options.BlobServiceUri), credential)
+                    .GetBlobContainerClient(options.DocumentContainerName);
+            });
+
+            builder.Services.AddScoped<SearchIndexClient>(provider =>
+            {
+                AzureServicesOptions options = provider.GetRequiredService<IOptions<AzureServicesOptions>>().Value;
+                return new SearchIndexClient(
+                    new Uri(options.SearchEndpoint),
+                    provider.GetRequiredService<TokenCredential>());
+            });
+
+            builder.Services.AddScoped<SearchClient>(provider =>
+            {
+                AzureServicesOptions options = provider.GetRequiredService<IOptions<AzureServicesOptions>>().Value;
+                return provider.GetRequiredService<SearchIndexClient>().GetSearchClient(options.SearchIndexName);
+            });
+
+            builder.Services.AddScoped<DocumentIntelligenceClient>(provider =>
+            {
+                AzureServicesOptions options = provider.GetRequiredService<IOptions<AzureServicesOptions>>().Value;
+                return new DocumentIntelligenceClient(
+                    new Uri(options.DocumentIntelligenceEndpoint),
+                    provider.GetRequiredService<TokenCredential>());
+            });
+
+            builder.Services.AddScoped<DocumentIntelligenceAdministrationClient>(provider =>
+            {
+                AzureServicesOptions options = provider.GetRequiredService<IOptions<AzureServicesOptions>>().Value;
+                return new DocumentIntelligenceAdministrationClient(
+                    new Uri(options.DocumentIntelligenceEndpoint),
+                    provider.GetRequiredService<TokenCredential>());
+            });
+
+            builder.Services.AddScoped<IAzureBlobService, AzureBlobService>();
+            builder.Services.AddScoped<IDocumentIntelligenceService, DocumentIntelligenceService>();
+            builder.Services.AddScoped<IAzureSearchService, AzureSearchService>();
+
+            // Service instances are scoped to an invocation, but completed event IDs must
+            // survive scope disposal so subsequent queue deliveries can still be recognized.
+            var processedEventIds = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
+            builder.Services.AddScoped<IProcessedEventMemory>(_ => new ProcessedEventMemory(processedEventIds));
 
             return builder;
         }
