@@ -34,45 +34,62 @@ public sealed class AzureAISearchIndexerFunction(
         [QueueTrigger("%DocumentEventsQueueName%", Connection = "DocumentEventsQueue")] string message,
         CancellationToken cancellationToken)
     {
-        await CheckServicesAsync(cancellationToken);
+        CloudEvent? cloudEvent = null;
+        string? blobName = null;
 
-        CloudEvent? cloudEvent = ParseCloudEvent(message);
-        if (cloudEvent is null)
+        try
         {
-            logger.LogWarning("Ignoring queue message because it is not a valid CloudEvents event.");
-            return;
-        }
+            cloudEvent = ParseCloudEvent(message);
+            if (cloudEvent is null)
+            {
+                logger.LogWarning("Ignoring queue message because it is not a valid CloudEvents event.");
+                return;
+            }
 
-        if (cloudEvent.Type is not BlobCreatedEventType and not BlobDeletedEventType)
+            if (cloudEvent.Type is not BlobCreatedEventType and not BlobDeletedEventType)
+            {
+                logger.LogInformation("Ignoring event {EventId} with unsupported type {EventType}.", cloudEvent.Id, cloudEvent.Type);
+                return;
+            }
+
+            StorageBlobEventData? eventData = cloudEvent.Data?.ToObjectFromJson<StorageBlobEventData>();
+            if (eventData is null || !blobService.TryGetBlobName(eventData.Url, out blobName))
+            {
+                logger.LogWarning("Ignoring event {EventId} of type {EventType} because its blob URL is invalid or belongs to another container.", cloudEvent.Id, cloudEvent.Type);
+                return;
+            }
+
+            if (cloudEvent.Type == BlobCreatedEventType
+                && !string.Equals(Path.GetExtension(blobName), ".pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                logger.LogInformation("Ignoring BlobCreated event {EventId} because blob {BlobName} is not a PDF.", cloudEvent.Id, blobName);
+                return;
+            }
+
+            logger.LogInformation("Processing event {EventId} of type {EventType} for blob {BlobName}.", cloudEvent.Id, cloudEvent.Type, blobName);
+
+            await CheckServicesAsync(cancellationToken);
+            await searchService.EnsureIndexExistsAsync(cancellationToken);
+
+            if (cloudEvent.Type == BlobCreatedEventType)
+            {
+                await HandleBlobCreatedAsync(cloudEvent.Id, blobName, cancellationToken);
+            }
+            else
+            {
+                await HandleBlobDeletedAsync(cloudEvent.Id, blobName, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            logger.LogInformation("Ignoring unsupported event type {EventType}.", cloudEvent.Type);
-            return;
+            logger.LogWarning("Processing event {EventId} of type {EventType} for blob {BlobName} was canceled.", cloudEvent?.Id, cloudEvent?.Type, blobName);
+            throw;
         }
-
-        StorageBlobEventData? eventData = cloudEvent.Data?.ToObjectFromJson<StorageBlobEventData>();
-        if (eventData is null || !blobService.TryGetBlobName(eventData.Url, out string blobName))
+        catch (Exception exception)
         {
-            logger.LogWarning("Ignoring event {EventId} because its blob URL is invalid or belongs to another container.", cloudEvent.Id);
-            return;
+            logger.LogError(exception, "Processing event {EventId} of type {EventType} for blob {BlobName} failed.", cloudEvent?.Id, cloudEvent?.Type, blobName);
+            throw;
         }
-
-        if (cloudEvent.Type == BlobCreatedEventType
-            && !string.Equals(Path.GetExtension(blobName), ".pdf", StringComparison.OrdinalIgnoreCase))
-        {
-            logger.LogInformation("Ignoring BlobCreated event {EventId} because blob {BlobName} is not a PDF.", cloudEvent.Id, blobName);
-            return;
-        }
-
-        // Ignored events return above, so they never call Azure AI Search.
-        await searchService.EnsureIndexExistsAsync(cancellationToken);
-
-        if (cloudEvent.Type == BlobCreatedEventType)
-        {
-            await HandleBlobCreatedAsync(cloudEvent.Id, blobName, cancellationToken);
-            return;
-        }
-
-        await HandleBlobDeletedAsync(cloudEvent.Id, blobName, cancellationToken);
     }
 
     private async Task CheckServicesAsync(CancellationToken cancellationToken)
@@ -146,7 +163,11 @@ public sealed class AzureAISearchIndexerFunction(
 
         // Mark the event only after every Azure operation succeeds so the queue can retry failures.
         processedEventMemory.MarkAsProcessed(eventId);
-        logger.LogInformation("BlobCreated event {EventId} was processed successfully.", eventId);
+        logger.LogInformation(
+            "BlobCreated event {EventId} for blob {BlobName} processed successfully: indexed {ChunkCount} chunks.",
+            eventId,
+            blobName,
+            pageChunks.Count);
     }
 
     private async Task HandleBlobDeletedAsync(
@@ -165,10 +186,10 @@ public sealed class AzureAISearchIndexerFunction(
         processedEventMemory.MarkAsProcessed(eventId);
 
         logger.LogInformation(
-            documentExisted
-                ? "BlobDeleted event {EventId} removed the document from Azure AI Search."
-                : "BlobDeleted event {EventId} found no matching document in Azure AI Search.",
-            eventId);
+            "BlobDeleted event {EventId} for blob {BlobName} processed successfully. Document found in Azure AI Search: {DocumentExisted}.",
+            eventId,
+            blobName,
+            documentExisted);
     }
 
     private static CloudEvent? ParseCloudEvent(string message)
